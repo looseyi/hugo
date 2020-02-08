@@ -1,0 +1,10 @@
+[submodule "themes/event"]
+	path = themes/event
+	url = git@github.com:olOwOlo/hugo-theme-even.git
+[submodule "themes/Even"]
+	path = themes/Even
+	url = git@github.com:olOwOlo/hugo-theme-even.git
+[submodule "public"]
+	path = public
+	url = git@github.com:looseyi/looseyi.github.io.git
+	branch = master
