@@ -1,5 +1,11 @@
 #!/bin/sh
 
+# rm old post
+rm -rf public
+
+# add git submodule to public path
+git submodule add --force -b master git@github.com:looseyi/looseyi.github.io.git public
+
 # If a command fails then the deploy stops
 set -e
 

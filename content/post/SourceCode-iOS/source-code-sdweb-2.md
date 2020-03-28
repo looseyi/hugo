@@ -1,11 +1,11 @@
 ---
 title: "源码浅析 SDWebImage 5.5.2 - WebP Plugin"
 date: 2020-03-11T23:08:12+08:00
-tags: ['source-code', 'iOS', 'cache']
+tags: ['SourceCode', 'iOS', 'cache']
 author: "土土Edmond木"
 ---
 
-本文基于 SDWebImage 5.5.2。重读的原因也是由于发现它的 API 在不断迭代，许多结构已经不同与早期版本，同时也是为了做一个记录。整体分析可以查看上一篇文章：[源码浅析 SDWebImage 5.5.2](https://looseyi.github.io/post/source-code-sdweb/)。
+本文基于 SDWebImage 5.5.2。重读的原因也是由于发现它的 API 在不断迭代，许多结构已经不同与早期版本，同时也是为了做一个记录。整体分析可以查看上一篇文章：[源码浅析 SDWebImage 5.5.2](https://looseyi.github.io/post/SourceCode-sdweb/)。
 
 本篇主要关于其插件系统，如何简单的通过插件来支持多样化的图片格式、支持系统图片加载，富文本 URL 加载，以及第三方插件的集成，比如 [Lottie](https://airbnb.design/lottie/)、[YYImage](https://github.com/ibireme/YYImage)、[YYCache](https://github.com/ibireme/YYCache)、[FLAnimatedImage](https://github.com/Flipboard/FLAnimatedImage)。目前支持的如下：
 
