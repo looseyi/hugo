@@ -1,7 +1,8 @@
 ---
 title: "源码浅析 SDWebImage 5.5.2 - WebP Plugin"
 date: 2020-03-11T23:08:12+08:00
-tags: ['SourceCode', 'iOS', 'cache']
+tags: ['SourceCode', 'iOS', 'cache', 'SourceCode']
+categories: ['iOS', 'Objc']
 author: "土土Edmond木"
 ---
 

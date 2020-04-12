@@ -1,7 +1,8 @@
 ---
 title: "完善 Cocoapods-Binary 支持 Server 端缓存"
 date: 2020-01-06T11:40:06+21:00
-tags: ['CocoaPods', 'iOS', 'Binary']
+tags: ['CocoaPods', 'iOS', 'Binary', 'SourceCode']
+categories: ['iOS', 'CocoaPods']
 draft: false
 ---
 

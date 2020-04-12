@@ -1,30 +1,31 @@
 ---
-title: "源码浅析 SDWebImage 5.5.2"
+title: "源码浅析 SDWebImage 5.6"
 date: 2020-02-22T23:08:12+08:00
-tags: ['SourceCode', 'iOS', 'cache']
+tags: ['SourceCode', 'iOS', 'cache', 'SourceCode']
+categories: ['iOS', 'Objc']
 author: "土土Edmond木"
 ---
 
-本文基于 SDWebImage 5.5.2。重读的原因也是由于发现它的 API 在不断迭代，许多结构已经不同与早期版本，同时也是为了做一个记录。阅读顺序也会依据 API 执行顺序进行，不会太拘泥于细节，更多是了解整个框架是如何运行的。
+本文基于 SDWebImage 5.6。重读的原因也是由于发现它的 API 在不断迭代，许多结构已经不同与早期版本，同时也是为了做一个记录。阅读顺序也会依据 API 执行顺序进行，不会太拘泥于细节，更多是了解整个框架是如何运行的。
 
 ![highlevel](https://raw.githubusercontent.com/SDWebImage/SDWebImage/master/Docs/Diagrams/SDWebImageHighLevelDiagram.jpeg)
 
 
 
-## 5.0 Migration Guid
+## 5.x Migration Guid
 
-如果大家有兴趣的，强烈推荐观看官方的推荐的[迁移文档](https://github.com/SDWebImage/SDWebImage/wiki/5.0-Migration-guide)，提到了5.0版本的需要新特性，里面详细介绍其新特性和变化动机，主要 features：
+如果大家有兴趣的，强烈推荐观看官方的推荐的[迁移文档](https://github.com/SDWebImage/SDWebImage/wiki/5.0-Migration-guide)，提到了5.x 版本的需要新特性，里面详细介绍其新特性和变化动机，主要 features：
 
 - 全新的 Animated Image View  (4.0 为 `FLAnimatedImageView`)；
 - 提供了 Image Transform 方便用户在下载图片后增加 scale, rotate, rounded corner 等操作；
 - Customization，可以说一切皆协议，可以 custom [cache](https://github.com/SDWebImage/SDWebImage/wiki/Advanced-Usage#custom-cache-50)、[loader](https://github.com/SDWebImage/SDWebImage/wiki/Advanced-Usage#custom-loader-50)、[coder](https://github.com/SDWebImage/SDWebImage/wiki/Advanced-Usage#custom-coder-420)；
 - 新增 View Indicator 来标识 Image 的 loading 状态；
 
-可以说，5.0 的变化在于将整个 SDWebImage 中的核心类进行了协议化，同时将图片的请求、加载、解码、缓存等操作尽可能的进行了插件化处理，达到方便扩展、可替换。
+可以说，5.x 的变化在于将整个 SDWebImage 中的核心类进行了协议化，同时将图片的请求、加载、解码、缓存等操作尽可能的进行了插件化处理，达到方便扩展、可替换。
 
 协议化的类型很多，这里仅列出一小部分：
 
-| 4.4                               | 5.0                             |
+| 4.4                               | 5.x                             |
 | --------------------------------- | ------------------------------- |
 | SDWebImageCacheSerializerBlock    | id\<SDWebImageCacheSerializer\> |
 | SDWebImageCacheKeyFilterBlock     | id\<SDWebImageCacheKeyFilter\>  |
@@ -78,7 +79,7 @@ author: "土土Edmond木"
 
 > Calling an API from a non-main queue that is executing on the main thread will lead to issues if the library (like VektorKit) relies on checking for execution on the main queue.
 
-区别就是从判断**是否在主线程执行**改为**是否由主队列上调度**。因为 **在主队列中的任务，一定会放到主线程执行**。
+区别就是从判断**是否在主线程执行**改为**是否在主队列上调度**。因为 **在主队列中的任务，一定会放到主线程执行**。
 
 相比 UIImageView 的分类，UIButton 需要存储不同 `UIControlState` 和 backgrounImage 下的 image，Associate 了一个内部字典 `(NSMutableDictionary<NSString *, NSURL *> *)sd_imageURLStorage` 来保存图片。
 
@@ -96,7 +97,7 @@ author: "土土Edmond木"
 
 这个方法实现很长，简单说明流程：
 
-1. copy `SDWebImageContext`  转为 immutable， 获取其中的 `validOperationKey` 默认值为 className；
+1. 将 `SDWebImageContext`  复制并转换为 immutable，获取其中的 `validOperationKey` 值作为校验 id，默认值为当前 view 的类名；
 2. 执行 `sd_cancelImageLoadOperationWithKey` 取消上一次任务，保证没有当前正在进行的异步下载操作, 不会与即将进行的操作发生冲突；
 3. 设置占位图；
 4. 初始化 `SDWebImageManager` 、`SDImageLoaderProgressBlock` , 重置 `NSProgress`、`SDWebImageIndicator`;
@@ -145,17 +146,12 @@ SDWebImageContextOption 是一个可扩展的 String 枚举，目前有 15 种�
 Prefetcher 它与 SD 整个处理流关系不大，主要用 imageManger 进行图片批量下载，核心方法如下：
 
 ```objective-c
-/**
- * Assign list of URLs to let SDWebImagePrefetcher to queue the prefetching. It based on the image manager so the image may from the cache and network according to the `options` property.
- * Prefetching is seperate to each other, which means the progressBlock and completionBlock you provide is bind to the prefetching for the list of urls.
- * Attention that call this will not cancel previous fetched urls. You should keep the token return by this to cancel or cancel all the prefetch.
- */
 - (nullable SDWebImagePrefetchToken *)prefetchURLs:(nullable NSArray<NSURL *> *)urls
                                           progress:(nullable SDWebImagePrefetcherProgressBlock)progressBlock
                                          completed:(nullable SDWebImagePrefetcherCompletionBlock)completionBlock;
 ```
 
-它将下载的 URLs 作为"事务"存入 `SDWebImagePrefetchToken` 中，避免之前版本在每次 `prefetchURLs:` 时将上一次的 fetching 操作 cancel 的问题。
+它将下载的 URLs 作为 `事务` 存入 `SDWebImagePrefetchToken` 中，避免之前版本在每次 `prefetchURLs:` 时将上一次的 fetching 操作 cancel 的问题。
 
 每个下载任务都是在 autoreleasesepool 环境下，且会用 `SDAsyncBlockOperation` 来包装真正的下载任务，来达到任务的可取消操作：
 
@@ -176,7 +172,7 @@ Prefetcher 它与 SD 整个处理流关系不大，主要用 imageManger 进行�
 }
 ```
 
-最后将任务存入 prefetchQueue，其限制下载的最大操作数默认为 3 。而 URLs 下载的真正任务是放在 `token.loadOperations`:
+最后将任务存入 prefetchQueue，其最大限制下载数默认为 3 。而 URLs 下载的真正任务是放在 `token.loadOperations`:
 
 ```objective-c
 NSPointerArray *operations = token.loadOperations;
@@ -277,11 +273,11 @@ request modifier，提供在下载前修改 request，
 @end
 ```
 
-通过这个协议化后的对象来处理数据，可以说是利用了设计模式中的 **策略模式** 或者 **依赖注入**。通过配置的方式获取到协议对象，调用方仅需关心协议对象提供的方法，无需在意其内部实现，达到功能解耦的目的。
+通过这个协议化后的对象来处理数据，可以说是利用了设计模式中的 **策略模式** 或者 **依赖注入**。通过配置的方式获取到协议对象，调用方仅需关心协议对象提供的方法，无需在意其内部实现，达到解耦的目的。
 
 
 
-**DownloadImageWithURL**
+###DownloadImageWithURL
 
 下载前先检查 URL 是否存在，没有则直接抛错返回。取到 URL 后尝试复用之前生成的 operation：
 
@@ -299,7 +295,7 @@ NSOperation<SDWebImageDownloaderOperation> *operation = [self.URLOperations obje
 
 并设置  queuePriority。这里用了 @synchronized(operation) ，同时 Operation 内部则会用 @synchronized(self)，以保证两个不同类间 operation 的线程安全，因为 operation 有可能被传递到解码或代理的队列中。这里 `addHandlersForProgress：` 会将 progressBlock 与 completedBlock 一起存入 `NSMutableDictionary<NSString *, id> SDCallbacksDictionary` 然后返回保存在 downloadOperationCancelToken 中。
 
-另外，Operation 在 `addHandlersForProgress:` 时并不会清除之前存储的 callbacks 是增量保存的，也就是说多次调用的 callBack 再完成后都会被依次执行。
+另外，Operation 在 `addHandlersForProgress:` 时并不会清除之前存储的 callbacks 是增量保存的，也就是说多次调用的 callBack 在完成后都会被依次执行。
 
 如果 operation 不存在、任务被取消、任务已完成，调用 `createDownloaderOperationWithUrl:options:context:` 创建出新的 operation 并存储在 URLOperations 中 。同时会配置 completionBlock，使得任务完成后可以及时清理 URLOperations。保存 progressBlock 和 completedBlock；提交 operation 到 downloadQueue。
 
@@ -307,7 +303,7 @@ NSOperation<SDWebImageDownloaderOperation> *operation = [self.URLOperations obje
 
 
 
-**CreateDownloaderOperation**
+###CreateDownloaderOperation
 
 下载结束，我们来聊聊 operation 是如何创建的。首先是生成 URLRequest：
 
@@ -422,11 +418,11 @@ ownedSession 的 delegate 毋庸置疑就在 operation 内部，而初始化传�
 }
 ```
 
-而 operation 内部则是真正的消费着。下载开始、结束、取消都会全局发送对应通知。 整个 responseData 处理流程比较清晰。
+接着作为真正的消费者 operation 开始下载任务，整个下载过程包括开始、结束、取消都会发送对应通知。
 
 1. 在 **didReceiveResponse** 时，会保存 response.expectedContentLength 作为 expectedSize。然后调用 `modifiedResponseWithResponse:` 保存编辑后的 reponse。 
 
-2. 每次 **didReceiveData** 会将 data 追加到 imageData：`[self.imageData appendData:data]` ，更新 receivedSize`self.receivedSize = self.imageData.length` 。最终，当 receivedSize > expectedSize 判定下载完成，执行后续处理。在每次收到数据时，如果支持 `SDWebImageDownloaderProgressiveLoad`，则会进入 coderQueue 进行边下载边解码:
+2. 每次 **didReceiveData** 会将 data 追加到 imageData：`[self.imageData appendData:data]` ，更新 receivedSize`self.receivedSize = self.imageData.length` 。最终，当 receivedSize > expectedSize 判定下载完成，执行后续处理。如果你支持了 `SDWebImageDownloaderProgressiveLoad`，每当收到数据时，将会进入 coderQueue 进行边下载边解码:
 
 ```objective-c
 // progressive decode the image in coder queue
@@ -450,7 +446,7 @@ if (imageData && self.decryptor) {
 }
 ```
 
-	3. 处理 complete 回调；
+​	3. 处理 complete 回调；
 
 关于 decode 的逻辑我们最后聊。
 
@@ -458,7 +454,7 @@ if (imageData && self.decryptor) {
 
 ## ImageCache
 
-基本上 Cache 相关类的设计思路与 ImageLoader 一致，会有一份 SDImageCacheConfig 以配置缓存的过期时间，容量大小，读写权限，以及动态可扩展的 MemoryCache/DiskCache。
+基本上 Cache 相关类的设计思路与 ImageLoader 一致，会有一份 **SDImageCacheConfig** 以配置缓存的过期时间，容量大小，读写权限，以及动态可扩展的 MemoryCache/DiskCache。
 
 SDImageCacheConfig 主要属性如下:
 
@@ -508,7 +504,7 @@ MemoryCache、DiskCache 的实例化都需要 SDImageCacheConfig 的传入：
 
 内部就是将 **NSCache** 扩展为了 SDMemoryCache 协议，并加入了 **NSMapTable<KeyType, ObjectType> *weakCache** ，并为其添加了信号量锁来保证线程安全。这里的 weak-cache 是仅在 *iOS/tvOS* 平台添加的特性，因为在 macOS 上尽管收到系统内存警告，NSCache 也不会清理对应的缓存。weakCache 使用的是 strong-weak 引用不会有有额外的内存开销且不影响对象的生命周期。
 
-weakCache 的作用在于恢复缓存，它通过 CacheConfig 的 **shouldUseWeakMemoryCache** 开关以控制，详细说明可以查看 CacheConfig 的API 声明。先看看其如何实现的：
+weakCache 的作用在于恢复缓存，它通过 CacheConfig 的 **shouldUseWeakMemoryCache** 开关以控制，详细说明可以查看 [CacheConfig.h](https://github.com/SDWebImage/SDWebImage/blob/master/SDWebImage/Core/SDImageCacheConfig.h)。先看看其如何实现的：
 
 ```objective-c
 - (id)objectForKey:(id)key {
@@ -549,7 +545,7 @@ weakCache 的作用在于恢复缓存，它通过 CacheConfig 的 **shouldUseWea
 
 
 
-另外一点就是 SDDiskCache 同 **YYKVStorage** 一样同样支持为 UIImage 添加 extendData 用以存储额外信息，例如，图片的缩放比例, [URL rich link](https://sspai.com/post/55279), 时间等其他数据。
+另外一点就是 SDDiskCache 同 **[YYKVStorage](https://github.com/ibireme/YYCache/blob/master/YYCache/YYKVStorage.h)** 一样同样支持为 UIImage 添加 extendData 用以存储额外信息，例如，图片的缩放比例, [URL rich link](https://sspai.com/post/55279), 时间等其他数据。
 
 不过 **YYKVStorage** 本身是用数据库中 ***manifest*** 表的 extended_data 字段来存储的。SDDiskCache 就另辟蹊径解决了。利用系统 API <sys/xattr.h> 的 **setxattr**、**getxattr**、**listxattr** 将 extendData 保存。可以说又涨姿势了。顺便说一下，它对应的 key 是用 *SDDiskCacheExtendedAttributeName*。
 
@@ -567,7 +563,7 @@ weakCache 的作用在于恢复缓存，它通过 CacheConfig 的 **shouldUseWea
 @property (nonatomic, strong, nullable) dispatch_queue_t ioQueue;
 ```
 
-其 *init* 中需要说明的就是 memoryCache 和  diskCache 实例的初始化是根据 CacheConfig 中定义的 class 来生成的，默认就是 SDMemoryCache 和 SDDiskCache。
+> 说明：memoryCache 和  diskCache 实例是依据 CacheConfig 中定义的 class 来生成的，默认为 SDMemoryCache 和 SDDiskCache。
 
 我们看看其核心方法：
 
@@ -605,7 +601,7 @@ weakCache 的作用在于恢复缓存，它通过 CacheConfig 的 **shouldUseWea
 
 
 
-相对 image storage 另一个重要的方法就是 image query 了，这是定义在 \<SDImageCache\> 协议中的方法：
+另一个重要的方法就是 image query，定义在 SDImageCache 协议中：
 
 ```objective-c
 - (id<SDWebImageOperation>)queryImageForKey:(NSString *)key options:(SDWebImageOptions)options context:(nullable SDWebImageContext *)context completion:(nullable SDImageCacheQueryCompletionBlock)completionBlock {
@@ -625,13 +621,13 @@ weakCache 的作用在于恢复缓存，它通过 CacheConfig 的 **shouldUseWea
 
 它只做了一件事情，将 SDWebImageOptions 转换为 SDImageCacheOptions，然后调用 `queryCacheOperationForKey:` ，其内部逻辑如下：
 
-首先，如果 query key 存在会通过 imageContext 获取 id\<SDImageTransformer\> transformer 对其转换:
+首先，如果 query key 存在，会从 imageContext 中获取 transformer，对 query key 进行转换:
 
 ```objective-c
 key = SDTransformedKeyForKey(key, transformerKey);
 ```
 
-尝试从 memory cache 能获取到 image 时：
+尝试从 memory cache 获取 image，如果存在：
 
 1. 满足 SDImageCacheDecodeFirstFrameOnly 且遵循 SDAnimatedImage 协议，则会取出 CGImage 进行转换
 
@@ -670,7 +666,7 @@ BOOL shouldQueryDiskSync = ((image && options & SDImageCacheQueryMemoryDataSync)
                             (!image && options & SDImageCacheQueryDiskDataSync));
 ```
 
-整个 diskQuery 时放入 queryDiskBlock 中:
+整个 diskQuery 存在 queryDiskBlock 中并用 autorelease 包裹：
 
 ```objective-c
 void(^queryDiskBlock)(void) =  ^{
@@ -708,9 +704,11 @@ void(^queryDiskBlock)(void) =  ^{
 }
 ```
 
-可以看到，有大量临时内存操作的时候 SD 都会放入 autoreleasepool 中，能保证其会被系统及时释放。还有一定比较重要的是，代码如果执行到这，就一定会有磁盘读取到操作，因此，如果不是必要得到 imageData 可以通过 **SDImageCacheQueryMemoryData** 来提供查询效率；
+对于大量临时内存操作 SD 都会将其放入 autoreleasepool 以保证内存能及时被释放。
 
-补充一点 `SDTransformedKeyForKey` 的转换逻辑是以 **SDImageTransformer** 的 transformerKey 按顺序依次拼接在 image key 后面。例如：
+特别强调，代码如果执行到这，就一定会有磁盘读取到操作，因此，如果不是非要获取 imageData 可以通过 **SDImageCacheQueryMemoryData** 来提高查询效率；
+
+最后，`SDTransformedKeyForKey` 的转换逻辑是以 **SDImageTransformer** 的 transformerKey 按顺序依次拼接在 image key 后面。例如：
 
 ```objective-c
 'image.png' |> flip(YES,NO) |> rotate(pi/4,YES)  => 
@@ -719,7 +717,7 @@ void(^queryDiskBlock)(void) =  ^{
 
 
 
-## ImageManaer
+## SDImageManaer
 
 SDImageManger 作为整个库的调度中心，上述各种逻辑的集大成者，它把各个组建串联，从视图 > 下载 > 解码器 > 缓存。而它暴露的核心方法就一个，就是 loadImage:
 
@@ -751,7 +749,7 @@ SDImageManger 作为整个库的调度中心，上述各种逻辑的集大成者
 
 **SDWebImageCacheSerializer**
 
-默认情况下，ImageCache 会直接将 downloadData 进行缓存，而当我们使用其他图片格式进行传输时，例如 WEBP 格式的，那么磁盘中的存储则会按 WEBP 格式来。这会产生一个问题，每次当我们需要从磁盘读取 image 时都需要进行重复的编码操作。而通过 CacheSerializer 可以直接将 downloadData 转换为 JPEG/PNG 的格式的 NSData 缓存，从而提高访问效率。
+默认情况下，ImageCache 会直接将 downloadData 进行缓存，而当我们使用其他图片格式进行传输时，例如 WEBP 格式的，那么磁盘中的存储则会按 WEBP 格式来。这会产生一个问题，每次当我们需要从磁盘读取 image 时都需要进行重复的解码操作。而通过 CacheSerializer 可以直接将 downloadData 转换为 JPEG/PNG 的格式的 NSData 缓存，从而提高访问效率。
 
 **SDWebImageOptionsProcessor**
 
@@ -778,7 +776,7 @@ SDImageManger 作为整个库的调度中心，上述各种逻辑的集大成者
 
 
 
-### loadImage
+### LoadImage
 
 接口的的第一个参数 url 作为整个框架的连接核心，却设计成 nullable 应该完全是方便调用方而设计的。内部通过对 url 的 nil 判断以及对 NSString 类型的兼容 (强制转成 NSURL) 以保证后续的流程，否则结束调用。下载开始后又拆分成了一下 6 个方法：
 
@@ -789,7 +787,7 @@ SDImageManger 作为整个库的调度中心，上述各种逻辑的集大成者
 - callCompletionBlockForOperation
 - safelyRemoveOperationFromRunning
 
-分别是：缓存查询、下载、存储、转换、执行回调、清理回调。可以发现每个方法都是针对 operation 的操作，operation 在 loadImage 时会准备好，然后开始缓存查询。
+分别是：缓存查询、下载、存储、转换、执行回调、清理回调。你可以发现每个方法都是针对 operation 的操作，operation 在 loadImage 时会准备好，然后开始缓存查询。
 
 ```objective-c
 SDWebImageCombinedOperation *operation = [SDWebImagCombinedOperation new];
@@ -816,7 +814,12 @@ SD_UNLOCK(self.runningOperationsLock);
 SDWebImageOptionsResult *result = [self processedResultForURL:url options:options context:context];
 ```
 
-**loadImage** 方法本身不复杂，方法走到最后则会转入缓存查询。在 operation 初始化完，会检查  failedURLs 是否包含当前 url，如果有且 options 为 SDWebImageRetryFailed，直接结束并返回 operation；如果检查通过会将 operation 存入 `runningOperations` 中。并将 options 和 imageContext 封入 SDWebImageOptionsResult。
+**loadImage** 方法本身不复杂，核心是生成 operation 然后转入缓存查询。
+
+在 operation 初始化后会检查  failedURLs 是否包含当前 url：
+
+- 如果有且 options 为 SDWebImageRetryFailed，直接结束并返回 operation；
+- 如果检查通过会将 operation 存入 `runningOperations` 中。并将 options 和 imageContext 封入 SDWebImageOptionsResult。
 
 同时，会更新一波 imageContext，主要先将 transformer、cacheKeyFilter、cacheSerializer 存入 imageContext 做为全局默认设置，再调用 **optionsProcessor** 来提供用户的自定义 options 再次加工 imageContext 。这个套路大家应该有印象吧，前面的 ImageLoader 中的 requestModifer 的优先级逻辑与此类似，不过实现方式有些差异。最后转入 CacheProcess。
 
@@ -837,11 +840,13 @@ SDWebImageOptionsResult *result = [self processedResultForURL:url options:option
 
 
 
-**callCacheProcessForOperation**
+####CallCacheProcessForOperation
 
-先检查 **SDWebImageFromLoaderOnly** 值，判断是否为直接下载的任务，是则转到 downloadProcess。
+先检查 **SDWebImageFromLoaderOnly** 值，判断是否为直接下载的任务，
 
-否则通过 imageCache 创建查询任务并将其保存到 combineOperation 的 cacheOperation ：
+是，则转到 downloadProcess。
+
+否，则通过 imageCache 创建查询任务并将其保存到 combineOperation 的 cacheOperation ：
 
 ```objective-c
 operation.cacheOperation = [self.imageCache queryImageForKey:key options:options context:context completion:^(UIImage * _Nullable cachedImage, NSData * _Nullable cachedData, SDImageCacheType cacheType) {
@@ -854,12 +859,12 @@ operation.cacheOperation = [self.imageCache queryImageForKey:key options:options
 
 对缓存查询的结果有两种情况需要处理：
 
-1. 当队列执行到任务时，operaton  已被标志为 canceled 状态，结束下载任务；
+1. 当队列执行到该任务时，如果 operaton 被标志为 canceled 状态则结束下载任务；
 2. 否则转到 downloadProcess 。
 
 
 
-**callDownloadProcessForOperation**
+####CallDownloadProcessForOperation
 
 下载的实现比较复杂，首先需要决定是否需要新建下载任务，由三个变量控制：
 
@@ -870,19 +875,19 @@ BOOL shouldDownload = !SD_OPTIONS_CONTAINS(options, SDWebImageFromCacheOnly);
     shouldDownload &= [self.imageLoader canRequestImageForURL:url];
 ```
 
-- 通过 SDWebImageFromCacheOnly 决定是否可以仅从 cache 来获取，或者 cacheImage 是否存在；
+- 检查 options 值是否为 SDWebImageFromCacheOnly 或 SDWebImageRefreshCached 的
 - 由代理决定是否需要新建下载任务
 - 通过 imageLoader 控制能否支持下载任务
 
 1. 如果 shouldDownload 为 NO，则结束下载并调用 **callCompletionBlockForOperation** 与 **safelyRemoveOperationFromRunning**。此时如果存在 cacheImage 则会随 completionBlock 一起返回。
 
-2. 如果 shouldDownload 为 YES，在新建任务前，如有取到 cacheImage 且 SDWebImageRefreshCached 为 YES，会将其存入 imageContext (没有则创建 imageContext）。终于开始新建下载任务并将其保存在 combineOperation 的 loaderOperation。
+2. 如果 shouldDownload 为 YES，新建下载任务并将其保存在 combineOperation 的 loaderOperation。在新建任务前，如有取到 cacheImage 且 SDWebImageRefreshCached 为 YES，会将其存入 imageContext (没有则创建 imageContext)。
 
 3. 下载结束后回到 callBack，这里会先处理几种情况：
 
    - operation 被 cancel 则抛弃下载的 image、data ，callCompletionBlock 结束下载；
    - reqeust 被 cancel 导致的 error，callCompletionBlock 结束下载；
-   - 图片刷新但是仍名字了 URLCache 则 do nothing；
+   - imageRefresh 后请求结果仍旧命中了 NSURLCache 缓存，则不会调用 callCompletionBlock；
    - errro 出错，callCompletionBlockForOperation 并将 url 添加至 failedURLs；
    - 均无以上情况，如果是通过 retry 成功的，会先将 url 从 failedURLs 中移除，调用 storeCacheProcess；
 
@@ -890,7 +895,7 @@ BOOL shouldDownload = !SD_OPTIONS_CONTAINS(options, SDWebImageFromCacheOnly);
 
    
 
-**callStoreCacheProcessForOperation**
+####CallStoreCacheProcessForOperation
 
 先从 imageContext 中取出 storeCacheType、originalStoreCacheType、transformer、cacheSerializer，判断是否需要存储转换后图像数据、原始数据、等待缓存存储结束：
 
@@ -904,7 +909,7 @@ BOOL waitStoreCache = SD_OPTIONS_CONTAINS(options, SDWebImageWaitStoreCache);
 
 ```objective-c
 // normally use the store cache type, but if target image is transformed, use original store cache type instead
-        SDImageCacheType targetStoreCacheType = shouldTransformImage ? originalStoreCacheType : storeCacheType;
+SDImageCacheType targetStoreCacheType = shouldTransformImage ? originalStoreCacheType : storeCacheType;
 ```
 
 存储时如果 cacheSerializer 存在则会先转换数据格式，最终都调用 `[self stroageImage: ...]` 。
@@ -913,12 +918,11 @@ BOOL waitStoreCache = SD_OPTIONS_CONTAINS(options, SDWebImageWaitStoreCache);
 
 
 
-**callTransformProcessForOperation**
+####CallTransformProcessForOperation
 
 转换开始前会例行判断是否需要转换，为 false 则 callCompletionBlock 结束下载，判断如下：
 
 ```objective-c
-
 id<SDImageTransformer> transformer = context[SDWebImageContextImageTransformer];
 id<SDWebImageCacheSerializer> cacheSerializer = context[SDWebImageContextCacheSerializer];
 BOOL shouldTransformImage = originalImage && (!originalImage.sd_isAnimated || (options & SDWebImageTransformAnimatedImage)) && transformer;
@@ -946,10 +950,10 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0), ^{
 
 ## 总结
 
-整个框架的脉络，到此就结束了。这次先整体介绍，希望大家看完能够大概知道 SD 的 work-flow 很重要，以及一些细节上到处理和思考。个人感受，SD 5.0 更多的是其结构设计上的很多思路值得借鉴。
+如果你能看到这里，还是很有耐心的。希望大家看完能够大概了解 SD 的 work-flow，以及一些细节上的处理和思考。在 SD 5.x 中，个人感受最多的是其架构的设计值得借鉴。
 
-- 如何设计一个稳定可扩展的 API 同时能支持安全动态添加参数？
-- 如果设计一个解耦可以动态插拔的架构？
+- 如何设计一个稳定可扩展的 API 又能安全地支持动态添加参数？
+- 如果设计一个解耦又可动态插拔的架构？
 
-不过，这篇其实还少了 SDImageCoder，这个留到下一篇的 SDWebImage 插件及其扩展上来说。
+最后，这篇其实还少了 SDImageCoder，这个留到下一篇的 SDWebImage 插件及其扩展上来说。
 

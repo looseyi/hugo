@@ -1,7 +1,8 @@
 ---
 title: "源码浅析 - MMKV iOS"
 date: 2020-02-08T23:23:47+08:00
-tags: ['SourceCode', 'iOS', 'cache']
+tags: ['SourceCode', 'iOS', 'cache', 'SourceCode']
+categories: ['iOS']
 author: "土土Edmond木"
 ---
 
