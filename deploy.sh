@@ -1,10 +1,10 @@
 #!/bin/sh
 
 # rm old post
-rm -rf public
+# git rm --cached public
 
-# add git submodule to public path
-git submodule add --force -b master git@github.com:looseyi/looseyi.github.io.git public
+# # add git submodule to public path
+# git submodule add -f -b master git@github.com:looseyi/looseyi.github.io.git public
 
 # If a command fails then the deploy stops
 set -e
@@ -12,7 +12,7 @@ set -e
 printf "\033[0;32mDeploying updates to GitHub...\033[0m\n"
 
 # Build the project.
-hugo # if using a theme, replace with `hugo -t <YOURTHEME>`
+hugo --ignoreCache --verbose # if using a theme, replace with `hugo -t <YOURTHEME>`
 
 # Go To Public folder
 cd public

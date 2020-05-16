@@ -1,8 +1,9 @@
 ---
-title: "源码浅析 SDWebImage 5.6"
+title: "浅析 SDWebImage 5.6"
 date: 2020-02-22T23:08:12+08:00
-tags: ['SourceCode', 'iOS', 'cache', 'SourceCode']
-categories: ['iOS', 'Objc']
+tags: ['Source Code', 'iOS', 'cache']
+categories: ['iOS']
+draft: false
 author: "土土Edmond木"
 ---
 

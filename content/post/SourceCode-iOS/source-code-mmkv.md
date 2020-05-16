@@ -1,35 +1,49 @@
 ---
-title: "源码浅析 - MMKV iOS"
-date: 2020-02-08T23:23:47+08:00
-tags: ['SourceCode', 'iOS', 'cache', 'SourceCode']
+title: "浅析 - MMKV 1.1 / iOS"
+date: 2020-05-05T23:23:47+08:00
+tags: ['Source Code', 'iOS', 'Cache']
 categories: ['iOS']
 author: "土土Edmond木"
+draft: false
 ---
 
-## **MMKV（官方介绍）**
+#介绍
 
->*MMKV 是基于 mmap 内存映射的 key-value 组件，底层序列化/反序列化使用 protobuf 实现，性能高，稳定性强。从 2015 年中至今在微信上使用，其性能和稳定性经过了时间的验证。近期也已移植到 Android / macOS / Windows 平台，一并开源。[github]( https://github.com/tencent/mmkv)*
+>MMKV is an **efficient**, **small**, **easy-to-use** mobile key-value storage framework used in the WeChat application. It's currently available on **Android**, **iOS/macOS**, **Win32** and **POSIX**.
 
-官方文档中有详细的使用说明和性能对比。我们知道 *[NSUserDedefaults](https://developer.apple.com/documentation/foundation/nsuserdefaults)* 不过是一份简单的 XML 文件，连苹果提供的对 objc 对象进行 NSKeyArchive 的序列化方式也不过是 XML 文件的翻版。 因此，MMKV 不仅线程安全而且性能完爆 *NSUserdefaults*；
+[MMKV](https://github.com/tencent/mmkv) 作为一个精简易用且性能强悍的全平台 K-V 存储框架，有如下特点：
+
+- **高效**：
+  - 利用 mmap 直接将文件映射到内存；
+  - 利用 protobuf 对键值进行编解码；
+  - 多进程并发；
+- **易用**：无需手动 `synchronize` 和配置，全程自动同步；
+- **精简**.
+  - **少量的文件**: 仅包括了编解码工具类和 mmap 逻辑代码，无冗余依赖；
+  - **二进制文件仅小于 30K**: 如为 ipa 文件则会更小；
+
+具体性能，微信团队提供了简单的 [benchmark](https://mp.weixin.qq.com/s/cZQ3FQxRJBx4px1woBaasg)。总之就是秒杀苹果的 NSUserDefaults，性能差异达 100 多倍。
 
 
 
-## **阅读须知**
+开始前稍微说明一下，现在大家看到的这篇文章算是重写的 2.0 版本。原先只是想要整理一下发布的公众号上，但发现 MMKV 悄摸地发布了主版本更新 [v1.1.0](https://github.com/Tencent/MMKV/releases/tag/v1.1.0)，而原先介绍的部分 API 已面目全非 💔，原因[详见](https://github.com/Tencent/MMKV/releases)：
 
-本文主要以 iOS 源码解析为重点，不过开始之前需要了解三个概念 [*mmap*](https://www.wikiwand.com/en/Mmap)、[*Protobuf*](https://www.wikiwand.com/en/Protocol_Buffers)、[CRC校验](https://www.wikiwand.com/en/Cyclic_redundancy_check)。
+> We refactor the whole MMKV project and unify the cross-platform Core library. From now on, MMKV on iOS/macOS, Android, Win32 all **share the same core logic code**. 
 
-#### **mmap wiki**
 
-> *In computing, mmap(2) is a POSIX-compliant Unix system call that maps files or devices into memory. It is a method of memory-mapped file I/O. It implements demand paging, because file contents are not read from disk initially and do not use physical RAM at all. The actual reads from disk are performed in a “lazy” manner, after a specific location is accessed.*
 
-有一篇[文章](https://www.cnblogs.com/huxiao-tee/p/4660352.html)解释的比较详细：
+##准备工作
 
-> *mmap是一种内存映射文件的方法，即将一个文件或者其它对象映射到进程的地址空间，实现文件磁盘地址和进程虚拟地址空间中一段虚拟地址的一一对映关系。实现这样的映射关系后，进程就可以采用指针的方式读写操作这一段内存，而系统会自动回写脏页面到对应的文件磁盘上，即完成了对文件的操作而不必再调用read,write等系统调用函数。相反，内核空间对这段区域的修改也直接反映用户空间，从而可以实现不同进程间的文件共享。*
+本文重点为分析 iOS 源码，在开始之前，大家需要了解几个概念，熟悉的同学可 pass。
 
-简单来说，read/write 文件操作，需要页缓存作为内核和应用层的中转，因此一次文件操作需要两次数据拷贝（内核到页缓存，页缓存到应用层），而 mmap 实现了用户空间和内核空间的数据直接交互而省去了页缓存。 mmap 也正式由于直接映射内存，其使用场景则有所限制。如[苹果文档所说](https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemAdvancedPT/MappingFilesIntoMemory/MappingFilesIntoMemory.html) ：
+[**mmap**](https://www.cnblogs.com/huxiao-tee/p/4660352.html)
 
->File mapping is effective when:
->
+> mmap是一种内存映射文件的方法，即将一个文件或者其它对象映射到进程的地址空间，实现文件磁盘地址和进程虚拟地址空间中一段虚拟地址的一一对映关系。实现这样的映射关系后，进程就可以采用指针的方式读写操作这一段内存，而系统会自动回写脏页面到对应的文件磁盘上，即完成了对文件的操作而不必再调用read,write等系统调用函数。相反，内核空间对这段区域的修改也直接反映用户空间，从而可以实现不同进程间的文件共享。
+
+感兴趣的同学可以访问上面链接。
+
+通常，我们的文件读写操作需要页缓存作为内核和应用层的中转。因此，一次文件操作需要两次数据拷贝（内核到页缓存，页缓存到应用层），而 mmap 实现了用户空间和内核空间数据的直接交互而省去了页缓存。 当然有利也有弊，如 [苹果文档](https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemAdvancedPT/MappingFilesIntoMemory/MappingFilesIntoMemory.html) 所述，想高效使用 mmap 需要符合以下场景：
+
 >- You have a large file whose contents you want to access randomly one or more times.
 >- You have a small file whose contents you want to read into memory all at once and access frequently. This technique is best for files that are no more than a few virtual memory pages in size.
 >- You want to cache specific portions of a file in memory. File mapping eliminates the need to cache the data at all, which leaves more room in the system disk caches for other data.
@@ -40,45 +54,49 @@ author: "土土Edmond木"
 
 
 
-#### **Protocol Buffer wiki**
+[**Protocol Buffer**](https://www.wikiwand.com/en/Protocol_Buffers)
 
-> **Protocol Buffers** (**Protobuf**) is a method of [serializing](https://www.wikiwand.com/en/Serialization) structured data. It is useful in developing programs to communicate with each other over a wire or for storing data. The method involves an [interface description language](https://www.wikiwand.com/en/Interface_description_language) that describes the structure of some data and a program that generates source code from that description for generating or parsing a stream of bytes that represents the structured data.
+> Protobuf is a method of [serializing](https://www.wikiwand.com/en/Serialization) structured data. It is useful in developing programs to communicate with each other over a wire or for storing data. The method involves an [interface description language](https://www.wikiwand.com/en/Interface_description_language) that describes the structure of some data and a program that generates source code from that description for generating or parsing a stream of bytes that represents the structured data.
 
-Protobuf 是一种将结构化数据进行序列化的方法。它最初是为了解决服务器端新旧协议(高低版本)兼容性问题而诞生的。因此，称为“协议缓冲区”，只不过后期慢慢发展成用于传输数据和存储等。
+Protobuf 是一种将结构化数据进行序列化的方法。它最初是为了解决服务器端新旧协议（高低版本）兼容性问题而诞生的。因此，称为“协议缓冲区”，只不过后期慢慢发展成用于传输数据和存储等。
 
-MMKV 正式考虑到了 protobuf 在性能和空间上的不错表现，采用了简化版 protobuf 作为序列化方案，还扩展了 protobuf 的增量更新的能力，将增量 kv 对象序列化后，直接 append 到内存末尾进行序列化。
+MMKV 正式考虑到了 protobuf 在性能和空间上的不错表现，采用了简化版 protobuf 作为序列化方案，还扩展了 protobuf 的增量更新的能力，将 K-V 对象序列化后，直接 append 到内存末尾进行序列化。
 
 那 Protobuf 是如何实现高效编码？
 
-1. 以 Tag - Value (Tag - Length - Value)的编码方式的实现，减少了分隔符的使用，数据存储更加紧凑。
-2. 利用 base 128 varint (变长编码）原理压缩数据以后，二进制数据非常紧凑，pb 体积更小。不过 pb 并没有压缩到极限，float、double 浮点型都没有压缩。
-3. 相比  JSON 和 XML 少了 {、}、: 这些符号，体积也减少一些。再加上 varint 压缩，gzip 压缩以后体积更小！
+1. 以 `Tag - Value` (Tag - Length - Value)的编码方式的实现。减少了分隔符的使用，数据存储更加紧凑；
+2. 利用 `base 128 varint` (变长编码）原理压缩数据以后，二进制数据非常紧凑，pb 体积更小。不过 pb 并没有压缩到极限，float、double 浮点型都没有压缩；
+3. 相比  JSON 和 XML 少了 ` {、}、: ` 这些符号，体积也减少一些。再加上 varint、gzip 压缩以后体积更小。
 
 
 
-#### **CRC 校验**
+**[CRC 校验](https://www.wikiwand.com/en/Cyclic_redundancy_check)**
 
-> 循环冗余校验（英语：Cyclic redundancy check，通称“CRC”）是一种根据网络数据包或计算机文件等数据产生简短固定位数校验码的一种散列函数，主要用来检测或校验数据传输或者保存后可能出现的错误。生成的数字在传输或者存储之前计算出来并且附加到数据后面，然后接收方进行检验确定数据是否发生变化。
+> 循环冗余校验（Cyclic redundancy check）是一种根据网络数据包或计算机文件等数据产生简短固定位数校验码的一种散列函数，主要用来检测或校验数据传输或者保存后可能出现的错误。生成的数字在传输或者存储之前计算出来并且附加到数据后面，然后接收方进行检验确定数据是否发生变化。
 
 考虑到文件系统、操作系统都有一定的不稳定性，MMKV 增加了 CRC 校验，对无效数据进行甄别。在 iOS 微信现网环境上，有平均约 70万日次的数据校验不通过。
 
 
 
-## **Implement**
+# MMKV
 
-开始之前先瞅一眼文件构成：
+在 v1.1.0 版本 Tencent 团队重写了整个 MMVK 项目，统一跨平台核心库。也就是说 MMKV 在 iOS/macOS, Android, Win32 是共享同一份核心逻辑。能在一定程度上提高了可维护性，以及优势共享。也正是由于这一点，在 iOS/macOS 上可以实现 **Multi-Process Access**。
 
-![class_name](http://ww1.sinaimg.cn/large/8157560cly1gbrnrhw7yvj20rs0ikgzw.jpg)
+在代码结构上，MMKV 独立出单独的 [MMVKCore.podspec](https://github.com/Tencent/MMKV/blob/master/MMKVCore.podspec)，MMKV iOS 则基于 MMKVCore 做了一层 Objc 的封装。
 
-正如官方介绍所说的，确实比较轻量。除了AES 加密所需引入的 openssl 之外，protobuf 也是 mini 版的。其余的类就是 MMKV 实现的主要构成。
+![MMVK Core.png](http://ww1.sinaimg.cn/large/8157560cly1gehfsnonv8j21fy0w4gqq.jpg)
+
+尽管原有的实现基本都迁移到 MMKV Core 中，逻辑并没有太多变化，重点在于公共逻辑都换成了 CXX 实现。
+
+我们依然从 `iOS/MMKV.h` 文件入手。
 
 
 
-### **MMKV**
+##MMKV
 
 
 
-#### **+[MMKV initialize]**
+
 
 ```objective-c
 + (void)initialize {

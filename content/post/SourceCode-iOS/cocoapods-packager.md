@@ -1,9 +1,10 @@
 ---
 title: "浅析 Cocoapods-Packager 实现"
 date: 2020-03-29T15:10:58+08:00
-tags: ['CocoaPods', 'iOS', 'Packager', 'SourceCode']
+tags: ['CocoaPods', 'iOS', 'Packager', 'Source Code']
 categories: ['iOS', 'CocoaPods']
 author: "土土Edmond木"
+draft: false
 
 ---
 
@@ -162,7 +163,7 @@ cocoapods-packager
 
 
 
-###CocoaPods Packager
+### CocoaPods Packager
 
 接下来我们提到的文件都是在 lib 文件夹下，即 Packager 的源代码所在地。开始前照例看一下脑图，有一个整体的认识：
 
@@ -197,7 +198,7 @@ Package Command 继承自 CocoaPods 内部所提供的命令工具模块 [CLAide
 
 
 
-###options
+### options
 
 > A list of option name and description tuples.
 
@@ -224,7 +225,7 @@ end
 
 
 
-###validate
+### validate
 
 校验所传参数有效性，如果参数中带有 `--help` 选项，则会直接抛出帮助提示。它会在 run 方法执行前被调用。重载前需要先调用 `super`，代码如下：
 
@@ -240,7 +241,7 @@ end
 
 
 
-###initialize
+### initialize
 
 解析参数，然后初始化打包所需的变量。这里着重介绍几个核心参数：
 
@@ -272,7 +273,7 @@ end
 
 
 
-###run
+### run
 
 ```ruby
  if @spec.nil?
@@ -306,7 +307,7 @@ ${workspaceRoot}/KFData-1.0.5
 
 
 
-###build_package
+### build_package
 
 ```ruby
 builder = SpecBuilder.new(@spec, @source, @embedded, @dynamic)
@@ -335,7 +336,7 @@ s.ios.vendored_framework   = 'ios/A.embeddedframework/A.framework'
 
 
 
-###build_in_sandbox
+### build_in_sandbox
 
 ```ruby
 config.installation_root  = Pathname.new(Dir.pwd)
@@ -391,7 +392,7 @@ include Config::Mixin
 
 整个 pods_utils 文件均声明为 Package 的 private 方法，主要做的是 build sandbox 和 pod install。install 会区分 static 和 dynamic。按照 `build_in_sandbox` 调用顺序展开聊聊。
 
-###build_static_sandbox
+### build_static_sandbox
 
 通过 Pathname 先生成 `static_sandbox_root` ，然后返回 `Sandbox.new(static_sandbox_root)`。static_sandbox_root 会根据参数 dynamic 来判断，是否需要创建二级目录 `/static`：
 
@@ -417,7 +418,7 @@ dynamic_sandbox_root = Pathname.new(config.sandbox_root + '/Dynamic')
 
 
 
-###install_pod
+### install_pod
 
 既然是 pod install 当然需要来一个 podfile 了。package 会根据指定的 spec 来手动创建 podfile。
 
@@ -487,7 +488,7 @@ static_installer
 
 
 
-###install_dynamic_pod
+### install_dynamic_pod
 
 `build_dynamic_sandbox` 前面已经说过了，我们直接看动态库的 install：
 
@@ -515,7 +516,7 @@ write_pod_project(project, dynamic_sandbox)
 
 
 
-###build_dynamic_target
+### build_dynamic_target
 
 ```ruby
 # 1
@@ -548,7 +549,7 @@ dynamic_target
 
 
 
-###prepare_pods_project
+### prepare_pods_project
 
 ```ruby
 # Create a new pods project
@@ -575,13 +576,13 @@ pods_project
 
 
 
-###copy_dynamic_target
+### copy_dynamic_target
 
 从 static sandbox 中 cp 到 dynamic sandbox 目录下。
 
 
 
-###install_file_references
+### install_file_references
 
 ```ruby
 installer = Pod::Installer::Xcode::PodsProjectGenerator::FileReferencesInstaller.new(dynamic_sandbox, pod_targets, pods_project)
@@ -594,13 +595,13 @@ installer.install!
 
 
 
-###install_library
+### install_library
 
 将 dynamic_target 写入新建的 project，同时会 install 依赖的 system framework。
 
 
 
-###write_pod_project
+### write_pod_project
 
 ```ruby
 dynamic_project.pods.remove_from_project if dynamic_project.pods.empty?

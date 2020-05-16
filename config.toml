@@ -1,4 +1,4 @@
-baseURL = "http://localhost:1313/"
+baseURL = "http://looseyi.github.io/"
 languageCode = "en"
 defaultContentLanguage = "zh-cn"                             # en / zh-cn / ... (This field determines which i18n file to use)
 title = ""
@@ -203,9 +203,9 @@ copyright = ""            # default: author.name ↓        # 默认为下面配
 #  isPlainText = true
 #  isHTML = false
 #
-#[outputs]
-#  home = ["HTML", "RSS"]
-#  page = ["HTML", "MarkDown"]
-#  section = ["HTML", "RSS"]
-#  taxonomy = ["HTML", "RSS"]
+[outputs]
+  home = ["HTML", "RSS"]
+  page = ["HTML", "RSS"]
+  section = ["HTML", "RSS"]
+  taxonomy = ["HTML", "RSS"]
 #  taxonomyTerm = ["HTML"]

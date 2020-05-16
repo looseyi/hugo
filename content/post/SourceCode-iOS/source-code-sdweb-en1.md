@@ -1,9 +1,10 @@
 ---
 title: "The Architecture of SDWebImage v5.6"
 date: 2020-04-12T23:08:12+17:00
-tags: ['SourceCode', 'iOS', 'cache', 'SourceCode']
+tags: ['Source Code', 'iOS', 'Cache']
 categories: ['iOS', 'Objc', 'En']
 author: "土土Edmond木"
+draft: false
 ---
 
 This article is based on SDWebImage 5.6. Why i write this article, cause i found that SD's API is constantly iterating, and many of the structures are different from earlier versions. Here is to make a record. We will start from the top of the API's level list below, force on the entire framework's data flow.
